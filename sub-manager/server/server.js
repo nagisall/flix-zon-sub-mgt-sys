@@ -12,6 +12,8 @@ const authRoutes = require("./routes/auth");
 const usersRoutes = require("./routes/users");
 const productRoutes = require('./routes/products');
 const subscriptionRoutes = require('./routes/subscriptions');
+const productRoutes = require("./routes/product");
+
 const app = express();
 
 app.use(cors());
@@ -32,6 +34,15 @@ app.get("/api/health", (req, res) => {
 app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/api/subscriptions", subscriptionRoutes);
+app.use("/api/products", productRoutes);
+
+const subscriptionRoutes = require("./routes/subscriptions");
+const invoiceRoutes      = require("./routes/invoices");
+const paymentRoutes      = require("./routes/payments");
+app.use("/api/subscriptions", subscriptionRoutes);
+app.use("/api/invoices",      invoiceRoutes);
+app.use("/api/payments",      paymentRoutes);
+
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
