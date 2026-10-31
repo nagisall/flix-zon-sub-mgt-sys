@@ -90,4 +90,74 @@ db.exec(`
     );
 `);
 
+// Subscriptions
+db.exec(`
+    CREATE TABLE IF NOT EXISTS subscriptions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_id INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+        plan_id INTEGER NOT NULL REFERENCES plans(id) ON DELETE RESTRICT,
+        status TEXT NOT NULL DEFAULT 'Draft'
+            CHECK(status IN ('Draft','Quotation','Confirmed','Active','Closed')),
+        payment_terms TEXT NOT NULL DEFAULT 'immediate',
+        start_date TEXT NOT NULL,
+        end_date TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        CHECK (end_date IS NULL OR end_date >= start_date)
+    );
+`);
+
+// Subscription Items
+db.exec(`
+    CREATE TABLE IF NOT EXISTS subscription_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        subscription_id INTEGER NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
+        product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+        variant_id INTEGER REFERENCES product_variants(id) ON DELETE SET NULL,
+        quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+        unit_price REAL NOT NULL CHECK (unit_price >= 0)
+    );
+`);
+
+// Invoices
+db.exec(`
+    CREATE TABLE IF NOT EXISTS invoices (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        subscription_id INTEGER NOT NULL REFERENCES subscriptions(id) ON DELETE RESTRICT,
+        status TEXT NOT NULL DEFAULT 'Draft'
+            CHECK(status IN ('Draft','Confirmed','Paid')),
+        subtotal REAL NOT NULL DEFAULT 0.00 CHECK (subtotal >= 0),
+        tax_amount REAL NOT NULL DEFAULT 0.00 CHECK (tax_amount >= 0),
+        discount_amount REAL NOT NULL DEFAULT 0.00 CHECK (discount_amount >= 0),
+        total_amount REAL NOT NULL DEFAULT 0.00 CHECK (total_amount >= 0),
+        due_date TEXT NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+`);
+
+// Invoice Lines
+db.exec(`
+    CREATE TABLE IF NOT EXISTS invoice_lines (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        invoice_id INTEGER NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+        description TEXT NOT NULL,
+        quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+        unit_price REAL NOT NULL CHECK (unit_price >= 0),
+        tax_rate REAL NOT NULL DEFAULT 0.00 CHECK (tax_rate >= 0),
+        line_total REAL NOT NULL CHECK (line_total >= 0)
+    );
+`);
+
+// Payments
+db.exec(`
+    CREATE TABLE IF NOT EXISTS payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        invoice_id INTEGER NOT NULL REFERENCES invoices(id) ON DELETE RESTRICT,
+        payment_method TEXT NOT NULL,
+        amount REAL NOT NULL CHECK (amount > 0),
+        payment_date TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        notes TEXT
+    );
+`);
+
 module.exports = db;
