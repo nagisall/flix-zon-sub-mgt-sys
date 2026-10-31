@@ -1,24 +1,42 @@
--- Enable UUID generation extension
+-- Clean up partial objects if they were created
+DROP TABLE IF EXISTS payments CASCADE;
+DROP TABLE IF EXISTS invoice_lines CASCADE;
+DROP TABLE IF EXISTS invoices CASCADE;
+DROP TABLE IF EXISTS subscription_items CASCADE;
+DROP TABLE IF EXISTS subscriptions CASCADE;
+DROP TABLE IF EXISTS discounts CASCADE;
+DROP TABLE IF EXISTS plans CASCADE;
+DROP TABLE IF EXISTS product_variants CASCADE;
+DROP TABLE IF EXISTS products CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
+
+DROP TYPE IF EXISTS discount_type CASCADE;
+DROP TYPE IF EXISTS invoice_status CASCADE;
+DROP TYPE IF EXISTS subscription_status CASCADE;
+DROP TYPE IF EXISTS billing_frequency CASCADE;
+DROP TYPE IF EXISTS user_role CASCADE;
+
+-- 1. Enable extension for UUID generation
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- Custom ENUM types
+-- 2. Custom ENUM types
 CREATE TYPE user_role AS ENUM ('admin', 'staff', 'customer');
 CREATE TYPE billing_frequency AS ENUM ('daily', 'weekly', 'monthly', 'yearly');
 CREATE TYPE subscription_status AS ENUM ('Draft', 'Quotation', 'Confirmed', 'Active', 'Closed');
 CREATE TYPE invoice_status AS ENUM ('Draft', 'Confirmed', 'Paid');
 CREATE TYPE discount_type AS ENUM ('fixed', 'percentage');
 
--- 1. Users / Accounts
-CREATE TABLE users 
+-- 3. Users / Accounts table
+CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email VARCHAR(255) UNIQUE NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     role user_role NOT NULL DEFAULT 'customer',
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- 2. Products & Variants
+-- 4. Products & Variants
 CREATE TABLE products (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
@@ -26,7 +44,7 @@ CREATE TABLE products (
     sales_price NUMERIC(12, 2) NOT NULL CHECK (sales_price >= 0),
     cost_price NUMERIC(12, 2) NOT NULL CHECK (cost_price >= 0),
     notes TEXT,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE product_variants (
@@ -36,10 +54,10 @@ CREATE TABLE product_variants (
     price_modifier NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
     cost_modifier NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
     metadata JSONB DEFAULT '{}'::jsonb,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- 3. Plans
+-- 5. Plans
 CREATE TABLE plans (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
@@ -48,11 +66,11 @@ CREATE TABLE plans (
     start_date DATE NOT NULL,
     end_date DATE,
     auto_close BOOLEAN NOT NULL DEFAULT false,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT check_plan_dates CHECK (end_date IS NULL OR end_date >= start_date)
 );
 
--- 4. Discounts
+-- 6. Discounts
 CREATE TABLE discounts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     code VARCHAR(50) UNIQUE,
@@ -67,7 +85,7 @@ CREATE TABLE discounts (
     CONSTRAINT check_discount_validity CHECK (valid_until IS NULL OR valid_until >= valid_from)
 );
 
--- 5. Quotations & Subscriptions
+-- 7. Quotations & Subscriptions
 CREATE TABLE subscriptions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     customer_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
@@ -76,8 +94,8 @@ CREATE TABLE subscriptions (
     payment_terms VARCHAR(255) NOT NULL,
     start_date DATE NOT NULL,
     end_date DATE,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT check_sub_dates CHECK (end_date IS NULL OR end_date >= start_date)
 );
 
@@ -90,7 +108,7 @@ CREATE TABLE subscription_items (
     unit_price NUMERIC(12, 2) NOT NULL CHECK (unit_price >= 0)
 );
 
--- 6. Invoices & Payments
+-- 8. Invoices & Payments
 CREATE TABLE invoices (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     subscription_id UUID NOT NULL REFERENCES subscriptions(id) ON DELETE RESTRICT,
@@ -100,7 +118,7 @@ CREATE TABLE invoices (
     discount_amount NUMERIC(12, 2) NOT NULL DEFAULT 0.00 CHECK (discount_amount >= 0),
     total_amount NUMERIC(12, 2) NOT NULL DEFAULT 0.00 CHECK (total_amount >= 0),
     due_date DATE NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE invoice_lines (
@@ -118,11 +136,11 @@ CREATE TABLE payments (
     invoice_id UUID NOT NULL REFERENCES invoices(id) ON DELETE RESTRICT,
     payment_method VARCHAR(50) NOT NULL,
     amount NUMERIC(12, 2) NOT NULL CHECK (amount > 0),
-    payment_date TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    payment_date TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     notes TEXT
 );
 
--- Performance Indexes on frequent query paths
+-- 9. Performance Indexes
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_subscriptions_customer ON subscriptions(customer_id);
 CREATE INDEX idx_invoices_subscription ON invoices(subscription_id);
