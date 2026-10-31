@@ -12,6 +12,7 @@ const router = express.Router();
 
 function validPassword(password) {
     return (
+        password &&
         password.length > 8 &&
         /[A-Z]/.test(password) &&
         /[a-z]/.test(password) &&
@@ -76,6 +77,72 @@ router.post(
             res.status(500).json({
                 message: "Unable to create staff account"
             });
+        }
+    }
+);
+
+// Get all staff (admin only)
+router.get(
+    "/staff",
+    authenticateToken,
+    authorizeRoles("admin"),
+    (req, res) => {
+        try {
+            const staff = db.prepare(`
+                SELECT id, name, email, role, is_active, created_at
+                FROM users
+                WHERE role = 'staff'
+                ORDER BY created_at DESC
+            `).all();
+            res.json({ message: "Staff retrieved successfully", data: staff });
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ message: "Error fetching staff members" });
+        }
+    }
+);
+
+// Get all customers (admin & staff)
+router.get(
+    "/customers",
+    authenticateToken,
+    authorizeRoles("admin", "staff"),
+    (req, res) => {
+        try {
+            const customers = db.prepare(`
+                SELECT id, name, email, role, is_active, created_at
+                FROM users
+                WHERE role = 'customer' AND is_active = 1
+                ORDER BY name ASC
+            `).all();
+            res.json({ message: "Customers retrieved successfully", data: customers });
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ message: "Error fetching customers" });
+        }
+    }
+);
+
+// Get all users (admin only)
+router.get(
+    "/",
+    authenticateToken,
+    authorizeRoles("admin"),
+    (req, res) => {
+        try {
+            const { role } = req.query;
+            let query = "SELECT id, name, email, role, is_active, created_at FROM users";
+            const params = [];
+            if (role) {
+                query += " WHERE role = ?";
+                params.push(role);
+            }
+            query += " ORDER BY created_at DESC";
+            const users = db.prepare(query).all(...params);
+            res.json({ message: "Users retrieved successfully", data: users });
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ message: "Error fetching users" });
         }
     }
 );

@@ -3,20 +3,50 @@ const router = express.Router();
 const db = require("../config/database");
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 
-// POST / — Record a payment (admin/staff only)
+// 1. GET ALL PAYMENTS (admin/staff sees all, customer sees own)
+router.get("/", authenticateToken, (req, res) => {
+    try {
+        let query = `
+            SELECT p.*, i.invoice_number, i.total_amount AS invoice_total,
+                   s.subscription_number,
+                   u.name AS customer_name, u.email AS customer_email
+            FROM payments p
+            JOIN invoices i ON p.invoice_id = i.id
+            JOIN subscriptions s ON i.subscription_id = s.id
+            JOIN users u ON s.customer_id = u.id
+        `;
+        const params = [];
+
+        if (req.user.role === "customer") {
+            query += " WHERE s.customer_id = ?";
+            params.push(req.user.id);
+        }
+
+        query += " ORDER BY p.payment_date DESC";
+
+        const payments = db.prepare(query).all(...params);
+        return res.status(200).json({ message: "Payments retrieved.", data: payments });
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ message: "Server error while fetching payments.", error: err.message });
+    }
+});
+
+// 2. POST / — Record a payment (admin/staff only)
 router.post(
     "/",
     authenticateToken,
     authorizeRoles("admin", "staff"),
     (req, res) => {
         try {
-            const { invoice_id, payment_method, amount, notes } = req.body;
+            const { invoice_id, payment_method, amount, notes, payment_date } = req.body;
 
             if (!invoice_id || !payment_method || amount == null) {
                 return res.status(400).json({ message: "invoice_id, payment_method, and amount are required." });
             }
 
-            if (typeof amount !== "number" || amount <= 0) {
+            const numericAmount = parseFloat(amount);
+            if (isNaN(numericAmount) || numericAmount <= 0) {
                 return res.status(400).json({ message: "amount must be a positive number." });
             }
 
@@ -29,31 +59,39 @@ router.post(
                 return res.status(400).json({ message: "Invoice is already fully paid." });
             }
 
+            if (invoice.status === "Cancelled") {
+                return res.status(400).json({ message: "Cannot accept payments on a cancelled invoice." });
+            }
+
             // Sum existing payments for this invoice
             const existingPayments = db.prepare(
                 "SELECT COALESCE(SUM(amount), 0) AS paid FROM payments WHERE invoice_id = ?"
             ).get(invoice_id);
 
             const alreadyPaid = existingPayments.paid;
-            const remaining = invoice.total_amount - alreadyPaid;
+            const remaining = Math.max(0, invoice.total_amount - alreadyPaid);
 
-            if (amount > remaining) {
+            if (numericAmount > remaining + 0.001) {
                 return res.status(400).json({
-                    message: `Payment amount (${amount}) exceeds the remaining balance (${remaining.toFixed(2)}) on this invoice.`
+                    message: `Payment amount (${numericAmount}) exceeds remaining balance (${remaining.toFixed(2)}) on this invoice.`
                 });
             }
 
+            const paymentDateStr = payment_date || new Date().toISOString();
+
             const recordPayment = db.transaction(() => {
                 const result = db.prepare(`
-                    INSERT INTO payments (invoice_id, payment_method, amount, notes)
-                    VALUES (?, ?, ?, ?)
-                `).run(invoice_id, payment_method, amount, notes || null);
+                    INSERT INTO payments (invoice_id, payment_method, amount, notes, payment_date)
+                    VALUES (?, ?, ?, ?, ?)
+                `).run(invoice_id, payment_method, numericAmount, notes || null, paymentDateStr);
 
-                const newTotalPaid = alreadyPaid + amount;
+                const newTotalPaid = alreadyPaid + numericAmount;
 
-                // Auto-mark invoice as Paid if fully covered
-                if (newTotalPaid >= invoice.total_amount) {
-                    db.prepare("UPDATE invoices SET status = 'Paid' WHERE id = ?").run(invoice_id);
+                // Update paid_amount and auto-mark invoice as Paid if fully covered
+                if (newTotalPaid >= invoice.total_amount - 0.001) {
+                    db.prepare("UPDATE invoices SET paid_amount = ?, status = 'Paid' WHERE id = ?").run(newTotalPaid, invoice_id);
+                } else {
+                    db.prepare("UPDATE invoices SET paid_amount = ? WHERE id = ?").run(newTotalPaid, invoice_id);
                 }
 
                 return db.prepare("SELECT * FROM payments WHERE id = ?").get(result.lastInsertRowid);
@@ -68,7 +106,7 @@ router.post(
     }
 );
 
-// GET /invoice/:invoice_id — List all payments for an invoice (admin/staff or invoice owner)
+// 3. GET /invoice/:invoice_id — List all payments for an invoice (admin/staff or invoice owner)
 router.get("/invoice/:invoice_id", authenticateToken, (req, res) => {
     try {
         const invoice = db.prepare(`
