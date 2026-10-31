@@ -1,14 +1,20 @@
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import Navbar from '../components/Navbar.jsx'
+import NewSubscriptionModal from '../components/NewSubscriptionModal.jsx'
 import { apiFetch } from '../api.js'
 
 export default function Subscriptions() {
+  const [searchParams] = useSearchParams()
   const [user, setUser] = useState(null)
   const [subscriptions, setSubscriptions] = useState([])
   const [filterStatus, setFilterStatus] = useState('ALL')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+
+  // New Subscription modal
+  const [showNewModal, setShowNewModal] = useState(searchParams.get('action') === 'new')
 
   // View line items modal
   const [selectedSub, setSelectedSub] = useState(null)
@@ -121,6 +127,14 @@ export default function Subscriptions() {
               Track the complete lifecycle: Draft → Quotation → Confirmed → Active → Closed
             </p>
           </div>
+          <button
+            className="btn btn-primary"
+            onClick={() => setShowNewModal(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+          >
+            <span style={{ fontSize: '1.1rem', lineHeight: 1 }}>+</span>
+            <span>{user?.role === 'customer' ? 'Subscribe to New Plan' : 'New Subscription'}</span>
+          </button>
         </div>
 
         {error && <div className="alert alert-error">{error}</div>}
@@ -288,6 +302,17 @@ export default function Subscriptions() {
           </div>
         </div>
       )}
+
+      {/* New Subscription Modal */}
+      <NewSubscriptionModal
+        isOpen={showNewModal}
+        onClose={() => setShowNewModal(false)}
+        onSuccess={() => {
+          setSuccess('Subscription activated successfully! Initial invoice has been generated.')
+          loadSubscriptions()
+        }}
+        user={user}
+      />
     </div>
   )
 }

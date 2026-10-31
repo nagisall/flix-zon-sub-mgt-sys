@@ -258,19 +258,21 @@ router.post("/", authenticateToken, (req, res) => {
         const fallbackTaxRate = defaultTax ? defaultTax.rate : 0.00;
 
         const nextBilling = addFrequencyToDate(start_date, plan.frequency);
+        const initialStatus = req.body.status || (req.user.role === "customer" ? "Active" : "Draft");
 
         const createSubscriptionTx = db.transaction(() => {
             const subResult = db.prepare(`
                 INSERT INTO subscriptions (customer_id, plan_id, status, payment_terms, start_date, end_date, next_billing_date, notes)
-                VALUES (?, ?, 'Draft', ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             `).run(
                 customer_id,
                 plan_id,
+                initialStatus,
                 payment_terms || "immediate",
                 start_date,
                 end_date || null,
                 nextBilling,
-                notes || null
+                notes || (req.user.role === "customer" ? "Self-service customer subscription" : null)
             );
 
             const subscriptionId = subResult.lastInsertRowid;
@@ -282,13 +284,20 @@ router.post("/", authenticateToken, (req, res) => {
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             `);
 
+            let subtotal = 0;
+            let taxAmount = 0;
+            const invLines = [];
+
             for (const item of items) {
                 const qty = parseInt(item.quantity) || 1;
                 const unitPrice = parseFloat(item.unit_price) || 0.00;
                 const taxRate = item.tax_rate != null ? parseFloat(item.tax_rate) : fallbackTaxRate;
-                const subtotal = qty * unitPrice;
-                const taxAmount = subtotal * (taxRate / 100);
-                const lineTotal = subtotal + taxAmount;
+                const lineSubtotal = qty * unitPrice;
+                const lineTax = lineSubtotal * (taxRate / 100);
+                const lineTotal = lineSubtotal + lineTax;
+
+                subtotal += lineSubtotal;
+                taxAmount += lineTax;
 
                 insertItem.run(
                     subscriptionId,
@@ -297,9 +306,42 @@ router.post("/", authenticateToken, (req, res) => {
                     qty,
                     unitPrice,
                     taxRate,
-                    taxAmount,
+                    lineTax,
                     lineTotal
                 );
+
+                const prod = db.prepare("SELECT name FROM products WHERE id = ?").get(item.product_id);
+                invLines.push({
+                    description: `${prod?.name || 'Service'} (${plan.name})`,
+                    quantity: qty,
+                    unit_price: unitPrice,
+                    tax_rate: taxRate,
+                    line_total: lineTotal
+                });
+            }
+
+            // If created as Active, generate the initial invoice
+            if (initialStatus === "Active") {
+                const dueDateObj = new Date();
+                dueDateObj.setDate(dueDateObj.getDate() + 15);
+                const dueDateStr = dueDateObj.toISOString().split("T")[0];
+
+                const invRes = db.prepare(`
+                    INSERT INTO invoices (subscription_id, status, subtotal, tax_amount, discount_amount, total_amount, due_date)
+                    VALUES (?, 'Draft', ?, ?, 0, ?, ?)
+                `).run(subscriptionId, subtotal, taxAmount, subtotal + taxAmount, dueDateStr);
+
+                const invId = invRes.lastInsertRowid;
+                db.prepare("UPDATE invoices SET invoice_number = ? WHERE id = ?").run(`INV-${String(invId).padStart(6, "0")}`, invId);
+
+                const insertLine = db.prepare(`
+                    INSERT INTO invoice_lines (invoice_id, description, quantity, unit_price, tax_rate, line_total)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                `);
+
+                for (const l of invLines) {
+                    insertLine.run(invId, l.description, l.quantity, l.unit_price, l.tax_rate, l.line_total);
+                }
             }
 
             return subscriptionId;

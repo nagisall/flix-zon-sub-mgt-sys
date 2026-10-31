@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import Navbar from '../components/Navbar.jsx'
+import NewSubscriptionModal from '../components/NewSubscriptionModal.jsx'
 import { apiFetch } from '../api.js'
 
 export default function Dashboard() {
@@ -12,6 +13,7 @@ export default function Dashboard() {
   const [error, setError] = useState('')
   const [billingMsg, setBillingMsg] = useState('')
   const [runningBilling, setRunningBilling] = useState(false)
+  const [showNewSubModal, setShowNewSubModal] = useState(false)
 
   useEffect(() => {
     try {
@@ -233,11 +235,24 @@ export default function Dashboard() {
                 <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#09090b' }}>Your Active Subscriptions</h3>
                 <p style={{ fontSize: '0.85rem', color: '#71717a' }}>Manage your cloud services, seats, and recurring renewals</p>
               </div>
+              <button
+                className="btn btn-primary"
+                onClick={() => setShowNewSubModal(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+              >
+                <span style={{ fontSize: '1.1rem', lineHeight: 1 }}>+</span>
+                <span>Subscribe to a Plan</span>
+              </button>
             </div>
 
             <div className="table-container" style={{ marginBottom: '2.5rem' }}>
               {customerSubs.length === 0 ? (
-                <div className="loading-text">You do not have any active subscriptions yet.</div>
+                <div style={{ textAlign: 'center', padding: '2.5rem 1rem' }}>
+                  <p style={{ color: '#71717a', marginBottom: '1rem', fontSize: '0.92rem' }}>You do not have any active subscriptions yet.</p>
+                  <button className="btn btn-primary" onClick={() => setShowNewSubModal(true)}>
+                    ✨ Subscribe to a Plan Now
+                  </button>
+                </div>
               ) : (
                 <table>
                   <thead>
@@ -314,6 +329,17 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* New Subscription Modal for Customer / Admin / Staff */}
+      <NewSubscriptionModal
+        isOpen={showNewSubModal}
+        onClose={() => setShowNewSubModal(false)}
+        onSuccess={() => {
+          setBillingMsg('Subscription successfully activated! Your new contract and initial invoice have been generated.')
+          loadDashboardData()
+        }}
+        user={user}
+      />
     </div>
   )
 }
