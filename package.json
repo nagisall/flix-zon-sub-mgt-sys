@@ -1,0 +1,23 @@
+{
+  "name": "flix-zon-sub-mgt-sys",
+  "version": "1.0.0",
+  "description": "Brightloop Software — Unified Subscription, Recurring Billing & Revenue Reconciliation Platform",
+  "scripts": {
+    "install:server": "cd sub-manager/server && npm install",
+    "install:client": "cd sub-manager/client && npm install",
+    "install:all": "npm run install:server && npm run install:client",
+    "seed": "cd sub-manager/server && node seed-demo.js",
+    "server": "cd sub-manager/server && node server.js",
+    "client": "cd sub-manager/client && npm run dev",
+    "build": "cd sub-manager/client && npm run build"
+  },
+  "keywords": [
+    "subscription-management",
+    "recurring-billing",
+    "mrr",
+    "invoicing",
+    "saas"
+  ],
+  "author": "Brightloop Engineering",
+  "license": "ISC"
+}
