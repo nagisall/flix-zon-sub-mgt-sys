@@ -9,7 +9,7 @@ CREATE TYPE invoice_status AS ENUM ('Draft', 'Confirmed', 'Paid');
 CREATE TYPE discount_type AS ENUM ('fixed', 'percentage');
 
 -- 1. Users / Accounts
-CREATE TABLE users (
+CREATE TABLE users 
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
