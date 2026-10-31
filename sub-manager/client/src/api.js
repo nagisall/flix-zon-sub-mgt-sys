@@ -1,11 +1,14 @@
 /**
  * Central API fetch wrapper.
- * - Prepends http://localhost:5000
+ * - In development, empty BASE_URL uses current origin + Vite proxy (/api -> :5000)
+ *   or falls back to localhost if accessed directly.
  * - Adds Authorization: Bearer <token> if token exists in localStorage
  * - Adds Content-Type: application/json
  * - Returns parsed JSON; throws error if response is not ok
  */
-const BASE_URL = 'http://localhost:5000'
+const BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? `http://${window.location.hostname}:5000`
+  : `http://${window.location.hostname}:5000`
 
 export async function apiFetch(path, options = {}) {
   const token = localStorage.getItem('token')
@@ -16,7 +19,10 @@ export async function apiFetch(path, options = {}) {
     ...(options.headers || {}),
   }
 
-  const response = await fetch(`${BASE_URL}${path}`, {
+  // Use relative path if proxied, or point to host IP on port 5000
+  const url = path.startsWith('/api') ? path : `${BASE_URL}${path}`
+
+  const response = await fetch(url, {
     ...options,
     headers,
   })
