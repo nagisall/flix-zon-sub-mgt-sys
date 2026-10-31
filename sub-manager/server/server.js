@@ -1,7 +1,3 @@
-// Import Product Routes
-const productRoutes = require('./routes/products');
-app.use('/api/products', productRoutes);
-
 require("dotenv").config();
 
 const express = require("express");
@@ -10,6 +6,7 @@ const rateLimit = require("express-rate-limit");
 
 const authRoutes = require("./routes/auth");
 const usersRoutes = require("./routes/users");
+const productRoutes = require("./routes/product");
 
 const app = express();
 
@@ -29,6 +26,7 @@ app.get("/api/health", (req, res) => {
 
 app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/users", usersRoutes);
+app.use("/api/products", productRoutes);
 
 const PORT = process.env.PORT || 5000;
 
